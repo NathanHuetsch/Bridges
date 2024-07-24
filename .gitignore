@@ -3,6 +3,7 @@ params/
 run_scripts/
 data/
 runfiles/
+results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
