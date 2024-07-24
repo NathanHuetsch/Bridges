@@ -8,9 +8,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 from omnifold_dataset import Omnifold
-from didi import Didi
-from cfm import CFM
-from plots import marginal_plots, migration_plots
+from models import CFM, Didi
+from plots import marginal_plots, migration_plots, single_event_plots
 
 
 def main():
@@ -50,16 +49,26 @@ def main():
     print("Training model")
     model.train(dataset.gen, dataset.rec, None)
 
+    print("Saving model")
+    os.makedirs(os.path.join(run_dir, "model"), exist_ok=True)
+    model_path = os.path.join(run_dir, "model", f"model.pth")
+    torch.save(model.state_dict(), model_path)
+
     # evaluate the model
     print("Sampling model")
-    unfolded = model.evaluate(dataset.rec)
+    dataset.unfolded = model.evaluate(dataset.rec)
+    print("Sampling single event unfoldings")
+    dataset.single_event_unfolded = model.single_event_unfolding(dataset.rec[:10])
+    dataset.apply_preprocessing(reverse=True)
 
     # make plots
     print("Making plots")
     file_marginalplots = os.path.join(run_dir, f"plots_marginals.pdf")
-    marginal_plots(file_marginalplots, dataset.gen, dataset.rec, unfolded)
+    marginal_plots(file_marginalplots, dataset)
     file_migrationplots = os.path.join(run_dir, f"plots_migration.pdf")
-    migration_plots(file_migrationplots, dataset.gen, dataset.rec, unfolded)
+    migration_plots(file_migrationplots, dataset.gen, dataset.rec, dataset.unfolded)
+    file_singleeventplots = os.path.join(run_dir, f"plots_singleevent.pdf")
+    single_event_plots(file_singleeventplots, dataset.gen, dataset.rec, dataset.single_event_unfolded)
 
 if __name__ == '__main__':
     main()
