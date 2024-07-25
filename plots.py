@@ -51,47 +51,48 @@ def marginal_plots(path, dataset):
             plt.close()
 
 
-def migration_plots(path, gen, rec, unfolded):
-    dims = gen.shape[-1]
+def migration_plots(path, dataset):
+    dims = dataset.gen.shape[-1]
     with PdfPages(path) as pp:
         for dim in range(dims):
-            bins = get_quantile_bins(rec[:, dim], n_bins=100)
+            bins = dataset.observables[dim]["bins"]
             fig, axs = plt.subplots(1,2, figsize=(10,4))
-            axs[0].hist2d(gen[:, dim].numpy(), rec[:, dim].numpy(), density=True, bins=bins)
-            axs[0].set_title(f"Data migration Dim {dim}")
+            axs[0].hist2d(dataset.gen[:, dim].cpu().numpy(), dataset.rec[:, dim].cpu().numpy(), density=True, bins=bins, rasterized=True)
+            axs[0].set_title(f"True " + dataset.observables[dim]["tex_label"], fontsize=FONTSIZE)
+            axs[0].set_xlabel("Rec", fontsize=FONTSIZE)
+            axs[0].set_ylabel("Gen", fontsize=FONTSIZE)
 
-            axs[1].hist2d(unfolded[:, dim].numpy(), rec[:, dim].numpy(), density=True, bins=bins)
-            axs[1].set_title(f"Model migration Dim {dim}")
+            axs[1].hist2d(dataset.unfolded[:, dim].cpu().numpy(), dataset.rec[:, dim].cpu().numpy(), density=True, bins=bins, rasterized=True)
+            axs[1].set_title(f"Model " + dataset.observables[dim]["tex_label"], fontsize=FONTSIZE)
+            axs[1].set_xlabel("Rec", fontsize=FONTSIZE)
+            axs[1].set_ylabel("Unfold", fontsize=FONTSIZE)
             plt.savefig(pp, format="pdf", bbox_inches="tight")
             plt.close()
 
 
-def single_event_plots(path, gen, rec, unfoldings):
-    n_events = unfoldings.shape[0]
-    n_unfoldings = unfoldings.shape[1]
-    dims = unfoldings.shape[2]
+def single_event_plots(path, dataset):
+    n_events = dataset.single_event_unfolded.shape[0]
+    n_unfoldings = dataset.single_event_unfolded.shape[1]
+    dims = dataset.single_event_unfolded.shape[2]
 
     with PdfPages(path) as pp:
         for dim in range(dims):
             for event in range(n_events):
-                event_rec = rec[event, dim]
-                event_gen = gen[event, dim]
-                event_unfoldings = unfoldings[event, :, dim]
+                event_rec = dataset.rec[event, dim]
+                event_gen = dataset.gen[event, dim]
+                event_unfoldings = dataset.single_event_unfolded[event, :, dim]
 
-                bins = get_quantile_bins(event_unfoldings, n_bins=50)
-                plt.axvline(event_rec, label="Event Rec", color="blue")
-                plt.axvline(event_gen, label="Event Gen", color="orange")
+                bins = dataset.observables[dim]["bins"]
+                plt.axvline(event_rec.cpu(), label="Event Rec", color="blue")
+                plt.axvline(event_gen.cpu(), label="Event Gen", color="orange")
                 plt.hist(event_unfoldings.cpu(), density=True, histtype="step", bins=bins, label="Unfoldings", color="green")
+                plt.hist(dataset.gen[:, dim].cpu(), density=True, bins=bins, label="Full Gen", alpha=0.2)
                 plt.legend()
-                plt.title(f"SingleEvent Event {event}, Dim {dim}")
+                plt.title(f"Event {event}", fontsize=FONTSIZE)
+                plt.ylabel("Normalized", fontsize=FONTSIZE)
+                plt.xlabel(dataset.observables[dim]["tex_label"], fontsize=FONTSIZE)
                 plt.savefig(pp, format="pdf", bbox_inches="tight")
                 plt.close()
-
-
-
-
-
-
 
 
 def get_quantile_bins(data, n_bins=50, lower=0.001, upper=0.001):

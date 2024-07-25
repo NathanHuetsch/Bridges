@@ -31,7 +31,7 @@ class Model(nn.Module):
 
     def train(self, data_x, data_c, weights=None):
         if weights is None:
-            weights = torch.ones((data_x.shape[0]))
+            weights = torch.ones((data_x.shape[0])).to(data_x.dtype).to(data_x.device)
         dataset = torch.utils.data.TensorDataset(data_x, data_c, weights)
         loader = torch.utils.data.DataLoader(dataset, batch_size=self.params["batch_size"],
                                              shuffle=True)

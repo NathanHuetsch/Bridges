@@ -43,7 +43,7 @@ def main():
 
     # build the model
     print("Building model", params["model_params"]["type"])
-    model = eval(params["model_params"]["type"])(dims_gen, dims_rec, params["model_params"])
+    model = eval(params["model_params"]["type"])(dims_gen, dims_rec, params["model_params"]).to(device)
 
     # train the model
     print("Training model")
@@ -58,7 +58,7 @@ def main():
     print("Sampling model")
     dataset.unfolded = model.evaluate(dataset.rec)
     print("Sampling single event unfoldings")
-    dataset.single_event_unfolded = model.single_event_unfolding(dataset.rec[:10])
+    dataset.single_event_unfolded = model.single_event_unfolding(dataset.rec[:5])
     dataset.apply_preprocessing(reverse=True)
 
     # make plots
@@ -66,9 +66,9 @@ def main():
     file_marginalplots = os.path.join(run_dir, f"plots_marginals.pdf")
     marginal_plots(file_marginalplots, dataset)
     file_migrationplots = os.path.join(run_dir, f"plots_migration.pdf")
-    migration_plots(file_migrationplots, dataset.gen, dataset.rec, dataset.unfolded)
+    migration_plots(file_migrationplots, dataset)
     file_singleeventplots = os.path.join(run_dir, f"plots_singleevent.pdf")
-    single_event_plots(file_singleeventplots, dataset.gen, dataset.rec, dataset.single_event_unfolded)
+    single_event_plots(file_singleeventplots, dataset)
 
 if __name__ == '__main__':
     main()
