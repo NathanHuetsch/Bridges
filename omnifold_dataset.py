@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import h5py
 
 
 class Omnifold:
@@ -7,27 +8,25 @@ class Omnifold:
     def __init__(self, params):
         self.params = params
 
-        self.path = params["path"]
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.init_dataset()
+        self.init_dataset(test=False)
         self.apply_preprocessing()
         self.init_observables()
 
-    def init_dataset(self):
-        try:
-            dataset = np.load(self.path)
-        except:
-            dataset = np.load(self.params["path2"])
-        n_data = self.params["n_data"]
-        self.gen = torch.tensor(dataset["pythia_gen"][:n_data]).float().to(self.device)
-        self.rec = torch.tensor(dataset["pythia_rec"][:n_data]).float().to(self.device)
+    def init_dataset(self, test=False):
+        n_data = self.params["n_train"] if not test else self.params["n_test"]
+        path = self.params["path_train"] if not test else self.params["path_test"]
+
+        with h5py.File(path, "r") as f:
+            gen = np.array(f["hard"])[:n_data, [0, 2, 5, 1, 3, 4]]
+            rec = np.array(f["reco"])[:n_data, [0, 2, 5, 1, 3, 4]]
+
+        self.gen = torch.tensor(gen).float().to(self.device)
+        self.rec = torch.tensor(rec).float().to(self.device)
 
     def apply_preprocessing(self, reverse=False):
 
         if not reverse:
-            #self.gen = self.gen[:, :5]
-            #self.rec = self.rec[:, :5]
-
             # add noise to the jet multiplicity to smear out the integer structure
             noise = torch.rand_like(self.rec[:, 1]) - 0.5
             self.rec[:, 1] = self.rec[:, 1] + noise
@@ -43,9 +42,16 @@ class Omnifold:
             self.gen = (self.gen - self.gen_mean)/self.gen_std
             self.rec = (self.rec - self.rec_mean)/self.rec_std
 
+            if self.params.get("shift_gen", False):
+                print("    Shifting gen")
+                self.gen = self.gen[:, [1, 2, 3, 4, 5, 0]]
+
         else:
             if not hasattr(self, "rec_mean"):
                 raise ValueError("Trying to run reverse preprocessing before forward preprocessing")
+
+            if self.params.get("shift_gen", False):
+                self.gen = self.gen[:, [5, 0, 1, 2, 3, 4]]
 
             # undo standardization
             self.gen = self.gen * self.gen_std + self.gen_mean
@@ -56,10 +62,14 @@ class Omnifold:
             self.gen[:, 1] = torch.round(self.gen[:, 1])
 
             if hasattr(self, "unfolded"):
+                if self.params.get("shift_gen", False):
+                    self.unfolded = self.unfolded[:, [5, 0, 1, 2, 3, 4]]
                 self.unfolded = self.unfolded * self.gen_std + self.gen_mean
                 self.unfolded[:, 1] = torch.round(self.unfolded[:, 1])
 
             if hasattr(self, "single_event_unfolded"):
+                if self.params.get("shift_gen", False):
+                    self.single_event_unfolded = self.single_event_unfolded[..., [5, 0, 1, 2, 3, 4]]
                 self.single_event_unfolded = self.single_event_unfolded * self.gen_std + self.gen_mean
                 self.single_event_unfolded[..., 1] = torch.round(self.single_event_unfolded[..., 1])
 

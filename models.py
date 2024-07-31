@@ -32,18 +32,28 @@ class Model(nn.Module):
     def train(self, data_x, data_c, weights=None):
         if weights is None:
             weights = torch.ones((data_x.shape[0])).to(data_x.dtype).to(data_x.device)
-        dataset = torch.utils.data.TensorDataset(data_x, data_c, weights)
-        loader = torch.utils.data.DataLoader(dataset, batch_size=self.params["batch_size"],
+
+        split = int(len(data_x) * 0.8)
+        trainset = torch.utils.data.TensorDataset(data_x[:split], data_c[:split], weights[:split])
+        valset = torch.utils.data.TensorDataset(data_x[split:], data_c[split:], weights[split:])
+
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=self.params["batch_size"],
                                              shuffle=True)
+        valloader = torch.utils.data.DataLoader(valset, batch_size=self.params["batch_size"],
+                                                  shuffle=True)
+
         n_epochs = self.params["n_epochs"]
         lr = self.params["lr"]
         optimizer = torch.optim.Adam(self.network.parameters(), lr=lr)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, len(loader) * n_epochs)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, len(trainloader) * n_epochs)
         print(f"Training for {n_epochs} epochs with lr {lr}")
         t0 = time.time()
+        self.trainlosses = []
+        self.vallosses = []
         for epoch in range(n_epochs):
-            losses = []
-            for i, batch in enumerate(loader):
+            trainlosses = []
+            vallosses = []
+            for i, batch in enumerate(trainloader):
                 x_hard, x_reco, weight = batch
                 optimizer.zero_grad()
                 loss = self.batch_loss(x_hard, x_reco, weight)
@@ -51,12 +61,26 @@ class Model(nn.Module):
                     loss.backward()
                     optimizer.step()
                     scheduler.step()
-                    losses.append(loss.item())
+                    trainlosses.append(loss.item())
                 else:
                     print(f"    Skipped update in epoch {epoch}, batch {i}, loss is", loss.item())
+
+            for i, batch in enumerate(valloader):
+                with torch.no_grad():
+                    x_hard, x_reco, weight = batch
+                    loss = self.batch_loss(x_hard, x_reco, weight)
+                    if loss < 200:
+                        vallosses.append(loss.item())
+                    else:
+                        print(f"    Skipped update in epoch {epoch}, batch {i}, loss is", loss.item())
+
+            avg_trainloss = torch.tensor(trainlosses).mean().item()
+            avg_valloss = torch.tensor(vallosses).mean().item()
+            self.trainlosses.append(avg_trainloss)
+            self.vallosses.append(avg_valloss)
             if epoch % int(n_epochs / 5) == 0:
-                print(f"    Finished epoch {epoch} with average loss {torch.tensor(losses).mean()} after time {round(time.time() - t0, 1)}")
-        print(f"    Finished epoch {epoch} with average loss {torch.tensor(losses).mean()} after time {round(time.time() - t0, 1)}")
+                print(f"    Finished epoch {epoch} with trainloss {avg_trainloss}, valloss {avg_valloss} after time {round(time.time() - t0, 1)}")
+        print(f"    Finished final epoch {epoch} with trainloss {avg_trainloss}, valloss {avg_valloss} after time {round(time.time() - t0, 1)}")
 
     def evaluate(self, data_c):
         predictions = []
@@ -152,7 +176,8 @@ class Didi(Model):
 
     def batch_loss(self, x_0, x_1, weight):
         noise = torch.randn_like(x_0)
-        t = torch.rand((x_0.size(0), 1)).to(x_0.device)
+        t_uniform = torch.rand((x_0.size(0), 1)).to(x_0.device)
+        t = t_uniform#**2
         x_t = (1 - t) * x_0 + t * x_1 + (self.noise_scale*t*(1.-t)).sqrt() * noise
         f = (x_t-x_0)/t
         if self.cond_x1:
